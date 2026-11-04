@@ -1,8 +1,8 @@
 # The Movie Review Project
 
-This is a data labeling interface for classifying the sentiment of movie reviews using the [IMDB movie review dataset](https://ai.stanford.edu/~amaas/data/sentiment/) (Maas et al., 2011), built for assignment A3-1. This is the version of the interface with AI assistance.
+This is a data labeling interface for classifying the sentiment of movie reviews using the [IMDB movie review dataset](https://ai.stanford.edu/~amaas/data/sentiment/) (Maas et al., 2011). This is the version of the interface with AI assistance.
 
-**Interface URL:** [https://gellerjuliaa.github.io/sentiment-labeling-interface-ai/](https://gellerjuliaa.github.io/sentiment-labeling-interface-ai/)
+**Interface URL:** [https://gellerjuliaa.github.io/sentiment-labeling-interface-ai-assistance/](https://gellerjuliaa.github.io/sentiment-labeling-interface-ai-assistance/)
 
 ## For graders
 
