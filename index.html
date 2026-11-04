@@ -1,0 +1,1417 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>The Movie Review Project</title>
+<script>
+/* Everything you'd want to change lives in this first script: study settings,
+   all displayed text, and the practice/attention-check items. The app's code
+   is in the script at the bottom of the file. */
+
+/* =====================================================================
+   STUDY SETTINGS — the only block you need to change between deployments.
+   This is the AI-assisted version: each review is shown with the AI's answer.
+===================================================================== */
+const CONFIG = {
+  // Which arm of the study this page is. Every saved record carries it.
+  CONDITION: "ai",
+  // Real reviews per participant. The two attention checks are added on top.
+  N_TRIALS: 5,
+  // The study dataset (built from the A2 CSV by make_reviews_json.py).
+  DATA_URL: "reviews.json",
+  // Your Google Apps Script web-app URL (ends in /exec). See README.
+  // While this is empty, responses are only saved in the participant's browser.
+  ENDPOINT: "",
+  // Shown to participants if their responses can't be uploaded.
+  CONTACT_EMAIL: "jugeller@umich.edu",
+};
+
+/* =====================================================================
+   EDITABLE TEXT — every word participants see lives here (plus the
+   practice reviews and attention checks just below).
+   {placeholder} tokens get filled in by the code; keep the braces.
+   Plain text or simple HTML (<b>, <br>) both work.
+===================================================================== */
+var COPY = {
+  pageTitle: "The Movie Review Project",
+
+  nav: { brand: "The Movie Review Project", home: "Home", instructions: "Instructions", start: "Label Data", about: "About", data: "Data" },
+
+  landing: {
+    ticketHint: "Click the ticket to begin!",
+    ticketAdmit: "Admit one",
+    ticketTitle: "The Movie Review Project",
+    ticketStub: "Row C<br>Seat 7",
+    letterTitle: "Thanks for coming!",
+    letterParagraphs: [
+      "You will read movie reviews written by IMDb users and decide how each reviewer felt about the movie.",
+      "Each round of annotation takes about 10 minutes, including a short tutorial with all the instructions you need.",
+    ],
+    continueBtn: "Get started",
+  },
+
+  home: {
+    tag: "About 10 minutes",
+    title: "Did they like the movie?",
+    subtitle: "Read {n} IMDb user reviews and decide whether each reviewer liked the movie. Your answers are part of a class study on how people judge reviews.",
+    sampleText: "I walked in expecting another lazy sequel and walked out grinning. It's not perfect, but it's the most fun I've had at the movies all year.",
+    sampleCaption: "<b>Positive:</b> the reviewer liked it.",
+    startBtn: "Label data",
+    labelingAsTemplate: "Labeling as <b>{name}</b>.",
+    notYouBtn: "Not you?",
+    resumeTemplate: "You have a session in progress as <b>{name}</b>.",
+    resumeBtn: "Resume",
+    moreTemplate: "You've labeled {count} reviews as <b>{name}</b>.",
+    moreBtn: "Label {n} more",
+    noBackendWarning: "<span><b>Setup needed:</b> no backend URL is set, so responses are only saved in this browser. Add your Apps Script URL to <code>CONFIG.ENDPOINT</code> before sharing the link.</span>",
+  },
+
+  idScreen: {
+    heading: "Before you start",
+    nameLabel: "Enter your uniqname",
+    namePlaceholder: "e.g. jsmith",
+    nameHint: "The part of your UMich email before @umich.edu.",
+    consent: "We'll record your uniqname, your answers, and your confidence ratings. This information is used only for this class project.",
+    continueBtn: "Continue",
+    nameRequired: "Enter your uniqname to continue.",
+  },
+
+  tutorial: {
+    backBtn: "Back",
+    nextBtn: "Next",
+    lastStepBtn: "Start practice",
+    // Each step can use any of: heading, intro, paragraphs, cards, exampleText
+    // (+ exampleLabel), aiExample (1 or 0), outro, bullets. Add, remove, or reorder steps freely.
+    steps: [
+      { heading: "Task", paragraphs: [
+        "You'll read <b>movie reviews</b> written by IMDb users.",
+        "For each review, you will decide whether the reviewer felt <b>positively</b> or <b>negatively</b> about the movie. Then you will rate how confident you are in your decision.",
+      ]},
+      { heading: "Decision Criteria",
+        intro: "Evaluate the <b>reviewer's own feelings about the movie</b> after watching it and not the characters' feelings or the tone of the movie. Your options are:",
+        cards: [
+          { emoji: "👍", title: "Positive", text: "The reviewer liked the movie overall." },
+          { emoji: "👎", title: "Negative", text: "The reviewer didn't like the movie overall." },
+        ],
+      },
+      { heading: "Misleading Scenarios",
+        intro: "Some reviews are harder to evaluate. Try to avoid being thrown off by:",
+        bullets: [
+          "<b>Sad or dark stories.</b> A sad ending doesn't mean they didn't like the movie.",
+          "<b>Opinions about characters.</b> Not liking a character is different from not liking the movie.",
+          "<b>A few complaints.</b> Most reviewers have some critiques. Try to focus on their overall opinion.",
+          "<b>Plot summaries.</b> Ignore summaries of the movie and focus on the reviewer's opinions.",
+        ],
+      },
+      { heading: "An example",
+        intro: "Here's a review that's easy to get wrong.",
+        exampleText: "Wow, what a movie. That Jennifer character was a mess. She made terrible decisions and the ending was heartbreaking. I haven't stopped thinking about it since.",
+        exampleLabel: 1,
+        outro: "The negative words describe a character and a sad ending, not the movie. 'Wow, what a movie' and 'I haven't stopped thinking about it' show the reviewer likely enjoyed it.",
+      },
+      { heading: "AI Assistance",
+        intro: "For each review, you will also see the AI's answer, like this:",
+        aiExample: 1,
+        outro: "You can use the AI's answer to help decide what you think the answer is.",
+      },
+      { heading: "Attention Checks", paragraphs: [
+        "During each round of annotation, you will get two attention checks to make sure you're focused on the task.",
+        "They are not movie reviews and will contain instructions on how to proceed.",
+        "The quality of your annotations will be evaluated using attention checks, so make sure to answer correctly!",
+      ]},
+      { heading: "Practice", bullets: [
+        "Next you'll do <b>2 practice reviews</b>. They don't count and are included to make sure you know how the annotation tool works.",
+      ]},
+    ],
+  },
+
+  practice: {
+    heading: "Practice {n} of {total}",
+    instructions: "This one doesn't count. Answer as if the labeling task had begun, then check your answer.",
+    checkBtn: "Check answer",
+    nextBtn: "Next practice review",
+    startBtn: "Start the study",
+    reviewDoneBtn: "Done",     // last button when someone opens the Instructions tab just to review
+    correctPrefix: "✅ <b>Correct.</b> ",
+    incorrectPrefix: "❌ <b>Incorrect.</b> ",
+    answerTemplate: "This review is <b>{label}</b>.",
+  },
+
+  task: {
+    progressTemplate: "{n} of {total}",
+    question: "Did the reviewer like the movie?",
+    confidenceQuestion: "How sure are you?",
+    confLow: "1 = guessing",
+    confHigh: "5 = certain",
+    nextBtn: "Next review",
+    lastBtn: "Finish reviews",
+    exitBtn: "Save & exit",
+    exitConfirm: "Save your progress and leave? Your answers so far are saved and you can start where you left off from the home page in this browser.",
+  },
+
+  ai: {
+    label: "AI's answer",   // shown on the card under each review
+    emoji: "🤖",
+  },
+
+  labels: {
+    1: { name: "Positive", hint: "Liked the movie", emoji: "👍" },
+    0: { name: "Negative", hint: "Didn't like the movie", emoji: "👎" },
+  },
+
+  done: {
+    heading: "You're done. Thank you!",
+    body: "You can label {n} more reviews or close this tab.",
+    moreBtn: "Label {n} more",
+    sync: {
+      ok: "✓ Your responses are saved.",
+      wait: "Saving your responses. Please keep this tab open.",
+      err: "Your responses haven't reached the server yet. We'll keep retrying. Please keep this tab open or download them and email the file to {email}.",
+      local: "No server is set up, so your responses are saved in this browser only.",
+    },
+    retryBtn: "Try saving again",
+    downloadBtn: "Download my responses",
+    answersHeading: "Your answers",
+    tableHeaders: ["#", "Review", "Your answer", "Confidence"],
+    confidenceTemplate: "{n} / 5",
+    emailNote: "If anything went wrong, download your responses and email the file to {email}.",
+  },
+
+  about: {
+    heading: "About this study",
+    intro: "This study is part of a Human-AI Interaction class project at the University of Michigan. It looks at how accurately and confidently people can tell whether a movie review is positive or negative.",
+    recordHeading: "What we record",
+    recordBody: "Your uniqname and each answer and confidence rating. Nothing else is collected and the data is used only for this class project.",
+    sourceHeading: "Where the reviews come from",
+    sourceBody: "The reviews come from the <strong>Large Movie Review Dataset</strong> (Maas et al., 2011): 50,000 IMDb user reviews, each labeled positive or negative from the reviewer's star rating. This study uses 200 reviews randomly sampled from its training split. The original labels are never shown to you. They are used afterwards to score answers.",
+    citation: "Maas, A. L., Daly, R. E., Pham, P. T., Huang, D., Ng, A. Y., &amp; Potts, C. (2011). Learning Word Vectors for Sentiment Analysis. <em>Proceedings of the 49th Annual Meeting of the Association for Computational Linguistics (ACL 2011)</em>, 142–150.",
+  },
+
+  data: {
+    heading: "Collected data (this browser)",
+    intro: "Records submitted from this browser. The full data from every participant is in the Google Sheet behind the backend.",
+    statLabels: ["review answers", "people", "waiting to upload"],
+    backendOn: "Backend: sending records to your Apps Script endpoint.",
+    backendOff: "Backend: not set. Add your Apps Script URL to CONFIG.ENDPOINT.",
+    csvBtn: "Download CSV",
+    jsonBtn: "Download JSON",
+    retryBtn: "Retry upload",
+    clearBtn: "Clear this browser's data",
+    clearConfirm: "Delete every record stored in this browser? Records already uploaded to the Google Sheet are not affected.",
+    tableHeaders: ["Uniqname", "Item", "True label", "Answer", "Confidence"],
+    reviewItem: "Review #{id}",
+    checkItem: "Check {id}",
+    wrongMark: " ✗",
+  },
+
+  loadError: {
+    heading: "Couldn't load the reviews",
+    body: "This page needs <code>{file}</code> in the same folder, served over http(s). Opening the file directly (file://) blocks that. Error: {error}",
+  },
+};
+
+/* =====================================================================
+   STUDY CONTENT — practice items, tutorial example, attention checks.
+   Labels: 1 = positive, 0 = negative (same as the IMDB dataset).
+   aiLabel is the AI's answer shown on each practice review.
+===================================================================== */
+const PRACTICE = [
+  { id: "P1", label: 1, aiLabel: 1,
+    text: "middle part dragged and the villain was kinda boring but the last 30 min were great. already told my friends to go see it",
+    explain: "They list two complaints, but they liked the ending and are recommending it." },
+  { id: "P2", label: 0, aiLabel: 0,
+    text: "looks amazing and the music is good but honestly i was bored the whole time. kept checking my phone. waste of an evening",
+    explain: "They say nice things about the visuals and music, but they were bored and felt it was a waste of time." },
+];
+// Instructed-response checks. Every batch of reviews gets both, at random points
+// (one in each half). Answers are recorded; nobody is stopped for missing them.
+const ATTENTION_CHECKS = [
+  { id: "AC1", label: 0, text: "This is an attention check, not a movie review. To show you're reading carefully, choose Negative, then any confidence level." },
+  { id: "AC2", label: 1, text: "Quick attention check: this isn't a real review. Please choose Positive, then any confidence level." },
+];
+</script>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,400..700;1,9..144,400..700&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+:root{
+  --bg-deep:#0b1330;
+  --bg-deep2:#111c42;
+  --panel:#ffffff;
+  --panel-soft:#f3f5fb;
+  --ink:#171f38;
+  --ink-soft:#5b6480;
+  --line:#e3e6f0;
+  --cta:#1a7f72;
+  --cta-dark:#146a5f;
+  --gold:#f2b84b;
+  --ticket:#f4ead1;
+  --ticket-ink:#b5433a;
+  --pos:#2f8f5b;
+  --neg:#c8463d;
+  --radius:16px;
+}
+*{box-sizing:border-box;}
+[hidden]{display:none !important;}
+html,body{margin:0;padding:0;}
+body{font-family:'Inter',system-ui,sans-serif; background:var(--bg-deep); color:var(--ink); min-height:100vh; display:flex; flex-direction:column;}
+h1,h2,h3{font-family:'Fraunces',Georgia,serif; color:var(--ink); line-height:1.15;}
+button{font-family:inherit; cursor:pointer;}
+:focus-visible{outline:3px solid var(--gold); outline-offset:2px;}
+.screen{display:none;}
+.screen.active{display:block; flex:1 0 auto;}
+
+/* ---------- NAV ---------- */
+#navbar{display:none; position:sticky; top:0; z-index:40; background:var(--bg-deep2); padding:14px 24px;
+  align-items:center; justify-content:space-between; gap:12px; flex-wrap:wrap; border-bottom:1px solid rgba(255,255,255,0.08);}
+#navbar.show{display:flex;}
+.brand{color:#fff; font-family:'Fraunces',serif; font-weight:600; font-size:18px; display:flex; align-items:center; gap:8px;}
+.brand-dot{width:9px; height:9px; border-radius:50%; background:var(--gold); display:inline-block;}
+.nav-links{display:flex; gap:6px; flex-wrap:wrap;}
+.nav-btn{background:transparent; border:none; color:#c7cde2; padding:8px 14px; border-radius:999px; font-size:14px; font-weight:600;}
+.nav-btn:hover{color:#fff;}
+.nav-btn.active{background:rgba(255,255,255,0.1); color:#fff;}
+@media(max-width:640px){ #navbar{padding:12px 16px;} .nav-btn{padding:6px 10px; font-size:13px;} }
+
+/* ---------- LAYOUT ---------- */
+.page-wrap{max-width:780px; margin:0 auto; padding:36px 24px 80px;}
+.center-wrap{max-width:760px; margin:0 auto; padding:40px 24px 80px; display:flex; flex-direction:column; align-items:center; text-align:center;}
+.card{background:var(--panel); border-radius:var(--radius); padding:32px; box-shadow:0 20px 50px -25px rgba(10,15,40,0.5);}
+.content-card{background:var(--panel); border-radius:20px; padding:36px; box-shadow:0 20px 50px -25px rgba(10,15,40,0.5);}
+.content-card h2{font-size:26px; margin-top:0;}
+.content-card p{color:var(--ink-soft); font-size:15.5px; line-height:1.7;}
+.content-card h3{font-size:16px; margin-bottom:6px;}
+.center{text-align:center;}
+@media(max-width:640px){ .page-wrap{padding:24px 14px 60px;} .content-card, .card{padding:24px 20px;} }
+
+/* ---------- LANDING (ticket) ---------- */
+#screen-landing{
+  position:relative; overflow:hidden; text-align:center;
+  background:
+    radial-gradient(1px 1px at 10% 20%, #fff, transparent),
+    radial-gradient(1px 1px at 80% 10%, #fff, transparent),
+    radial-gradient(1.5px 1.5px at 60% 30%, #fff, transparent),
+    radial-gradient(1px 1px at 30% 60%, #fff, transparent),
+    radial-gradient(1.5px 1.5px at 90% 70%, #fff, transparent),
+    radial-gradient(1px 1px at 45% 80%, #fff, transparent),
+    linear-gradient(180deg, #0a1230 0%, #16225a 60%, #1c2c6b 100%);
+}
+/* display lives in this .active-gated rule (not the bare ID rule) so the
+   ID selector can't override .screen{display:none} — same fix as A1. */
+#screen-landing.active{display:flex; align-items:center; justify-content:center; flex:1 0 auto;}
+.landing-inner{position:relative; z-index:2; color:#fff; padding:24px;}
+#ticket-scene{transition:opacity .4s ease, transform .4s ease;}
+#ticket-scene.fading{opacity:0; transform:translateY(-16px); pointer-events:none;}
+#ticket-scene.gone{display:none;}
+.ticket-wrap{display:inline-block; filter:drop-shadow(0 18px 28px rgba(0,0,0,0.55)); margin-bottom:22px;}
+.ticket{display:flex; background:none; border:none; padding:0; transition:transform .25s ease;}
+.ticket:hover{transform:translateY(-4px) rotate(-1.5deg);}
+.ticket-main,.ticket-stub{background:var(--ticket); color:var(--ticket-ink); display:flex; flex-direction:column; justify-content:center;}
+.ticket-main{
+  padding:22px 30px; text-align:left; border-radius:8px 0 0 8px;
+  -webkit-mask:radial-gradient(circle 10px at 100% 0, #0000 98%, #000) top/100% 51% no-repeat,
+               radial-gradient(circle 10px at 100% 100%, #0000 98%, #000) bottom/100% 51% no-repeat;
+          mask:radial-gradient(circle 10px at 100% 0, #0000 98%, #000) top/100% 51% no-repeat,
+               radial-gradient(circle 10px at 100% 100%, #0000 98%, #000) bottom/100% 51% no-repeat;
+}
+.ticket-stub{
+  padding:22px 18px; border-left:2px dashed rgba(181,67,58,0.45); border-radius:0 8px 8px 0;
+  transition:transform .55s cubic-bezier(.4,.2,.2,1), opacity .55s ease;
+  -webkit-mask:radial-gradient(circle 10px at 0 0, #0000 98%, #000) top/100% 51% no-repeat,
+               radial-gradient(circle 10px at 0 100%, #0000 98%, #000) bottom/100% 51% no-repeat;
+          mask:radial-gradient(circle 10px at 0 0, #0000 98%, #000) top/100% 51% no-repeat,
+               radial-gradient(circle 10px at 0 100%, #0000 98%, #000) bottom/100% 51% no-repeat;
+}
+.ticket-admit{font-family:'Fraunces',serif; font-style:italic; font-size:15px;}
+.ticket-title{font-family:'Fraunces',serif; font-weight:700; font-size:25px; line-height:1.1; margin-top:4px; max-width:11ch;}
+.ticket-stub span{font-size:12.5px; font-weight:700; line-height:1.5; text-align:center;}
+.ticket.torn .ticket-stub{transform:translate(46px,70px) rotate(26deg); opacity:0;}
+.ticket-hint{font-size:14px; opacity:0.85;}
+.letter{display:none; max-width:480px; background:#fbf6e9; color:#2c2410; border-radius:10px; padding:36px 32px;
+  box-shadow:0 30px 60px -20px rgba(0,0,0,0.6); text-align:left; font-family:'Fraunces',serif; font-size:17px; line-height:1.6;}
+.letter.show{display:block; animation:fadeUp .6s ease;}
+@keyframes fadeUp{from{opacity:0; transform:translateY(14px);} to{opacity:1; transform:translateY(0);}}
+.letter-title{font-size:23px; font-weight:700; margin-bottom:12px;}
+#continue-btn{margin-top:20px;}
+
+/* ---------- BUTTONS ---------- */
+.btn{border:none; border-radius:999px; padding:13px 26px; font-size:15px; font-weight:700; display:inline-flex; align-items:center; gap:8px;}
+.btn-primary{background:var(--cta); color:#fff;}
+.btn-primary:hover{background:var(--cta-dark);}
+.btn-dark{background:rgba(255,255,255,0.14); color:#fff; border:1.5px solid rgba(255,255,255,0.75);}
+.btn-dark:hover{background:rgba(255,255,255,0.22); border-color:#fff;}
+.btn-outline{background:transparent; color:var(--ink); border:1.5px solid var(--line);}
+.btn-outline:hover{border-color:var(--ink);}
+.btn-danger{background:transparent; color:var(--neg); border:1.5px solid var(--neg);}
+.btn-small{padding:8px 16px; font-size:13px;}
+.btn-block{width:100%; justify-content:center;}
+.btn:disabled{opacity:0.4; cursor:not-allowed;}
+
+/* ---------- HOME ---------- */
+.tag{display:inline-block; background:rgba(47,184,166,0.22); color:#8fe3d6; font-weight:700; font-size:13px;
+  padding:6px 12px; border-radius:999px; margin-bottom:16px;}
+.hero-title{font-size:40px; margin:0 0 14px; color:#fff;}
+.hero-sub{color:#c7cde2; font-size:16.5px; line-height:1.6; max-width:540px; margin:0 auto 26px;}
+.sample-review{background:var(--panel); border-radius:14px; padding:20px 22px; text-align:left; max-width:460px; margin:0 auto 30px;}
+.sample-review blockquote{margin:0; font-family:'Fraunces',serif; font-size:16.5px; line-height:1.6; color:var(--ink);}
+.sample-review figcaption{margin-top:12px; padding-top:10px; border-top:1px solid var(--line); font-size:13px; color:var(--ink-soft);}
+.sample-review figcaption b{color:var(--pos);}
+.banner{border-radius:12px; padding:14px 18px; margin-bottom:22px; font-size:14.5px; display:flex; align-items:center;
+  justify-content:space-between; gap:14px; max-width:560px; text-align:left;}
+.banner.resume{background:#fff7e6; border:1px solid #f1d9a3; color:#7a5b12;}
+.banner-actions{display:flex; gap:8px; flex-shrink:0;}
+.banner.warn{background:#fdeeee; border:1px solid #f3c3c3; color:#8a2f2f;}
+
+/* ---------- FORMS ---------- */
+.id-card{text-align:left; max-width:460px; width:100%;}
+.id-card h2{margin-top:0;}
+.field{margin:0 0 20px; padding:0; border:none;}
+.field label,.field legend,.field-label{display:block; font-weight:600; font-size:14.5px; margin-bottom:8px; padding:0; color:var(--ink);}
+.field input{width:100%; padding:12px 14px; border-radius:10px; border:1.5px solid var(--line); font-size:15px; font-family:inherit;}
+.hint{color:var(--ink-soft); font-size:12.5px; margin-top:6px; line-height:1.5;}
+.consent{color:var(--ink-soft); font-size:13px; line-height:1.55; background:var(--panel-soft); border-radius:10px; padding:12px 14px; margin:0 0 14px;}
+.form-error{color:var(--neg); font-size:13.5px; font-weight:600; min-height:20px; margin-bottom:8px;}
+textarea{width:100%; min-height:110px; border-radius:12px; border:1.5px solid var(--line); padding:14px; font-family:inherit; font-size:14.5px; resize:vertical;}
+
+/* segmented choices: the 1–5 confidence scale */
+.seg{display:grid; grid-template-columns:repeat(var(--n,2),1fr); gap:8px;}
+.seg-btn{border:2px solid var(--line); background:#fff; border-radius:10px; padding:10px 6px; font-weight:700; font-size:15px; color:var(--ink);}
+.seg-btn:hover:not(:disabled){border-color:var(--ink);}
+.seg-btn.selected{border-color:var(--gold); background:#fffaef; box-shadow:0 0 0 3px rgba(242,184,75,0.3);}
+.seg-btn:disabled{cursor:default;}
+.seg-ends{display:flex; justify-content:space-between; gap:12px; font-size:12.5px; color:var(--ink-soft); margin-top:6px;}
+
+/* ---------- TUTORIAL ---------- */
+.tut-progress{display:flex; gap:6px; justify-content:center; margin-bottom:22px;}
+.tut-dot{width:8px; height:8px; border-radius:50%; background:rgba(255,255,255,0.25);}
+.tut-dot.done{background:var(--cta);}
+.tut-dot.now{background:var(--gold);}
+.tut-body h2{font-size:25px; margin-top:0;}
+.tut-body p,.tut-body li{color:var(--ink-soft); font-size:15.5px; line-height:1.65;}
+.tut-body ul{padding-left:20px; margin:0;}
+.tut-body li{margin-bottom:8px;}
+.tut-nav{display:flex; justify-content:space-between; margin-top:24px;}
+.def-grid{display:grid; grid-template-columns:1fr 1fr; gap:12px; margin-top:16px;}
+@media(max-width:640px){ .def-grid{grid-template-columns:1fr;} }
+.def-card{border-radius:12px; padding:14px 16px; border:1.5px solid var(--line);}
+.def-emoji{font-size:22px; margin-bottom:4px;}
+.def-name{font-weight:700; font-size:15px; margin-bottom:4px;}
+.def-text{font-size:13.5px; color:var(--ink-soft); line-height:1.5;}
+.example-box{background:var(--panel-soft); border-radius:12px; padding:18px 20px; margin:16px 0; border:1px solid var(--line);}
+.example-box .review-text{font-size:17px;}
+.pill{display:inline-block; margin-top:12px; padding:5px 12px; border-radius:999px; font-size:12.5px; font-weight:700; color:#fff;}
+.pill.positive{background:var(--pos);} .pill.negative{background:var(--neg);}
+
+/* ---------- REVIEW + CHOICES ---------- */
+.on-dark{color:#fff; margin:0 0 6px; font-size:24px;}
+.on-dark-soft{color:#c7cde2; margin:0 0 18px; font-size:15px; line-height:1.55;}
+.review-card{background:var(--panel); border-radius:20px; padding:32px 36px; margin-bottom:16px; box-shadow:0 20px 50px -25px rgba(10,15,40,0.5);}
+.review-text{font-family:'Fraunces',Georgia,serif; font-weight:400; font-size:18px; line-height:1.72; color:var(--ink);
+  white-space:pre-line; overflow-wrap:anywhere; max-width:66ch; margin:0 auto;}
+.choice-panel{background:var(--panel); border-radius:20px; padding:24px 28px; box-shadow:0 20px 50px -25px rgba(10,15,40,0.5);}
+.choice-q{font-weight:700; font-size:15px; margin:0 0 10px; color:var(--ink);}
+.label-row{display:grid; grid-template-columns:1fr 1fr; gap:12px; margin-bottom:22px;}
+.label-btn{border:2px solid var(--line); background:#fff; border-radius:14px; padding:14px 16px; color:var(--ink);
+  display:grid; grid-template-columns:auto 1fr; column-gap:12px; align-items:center; text-align:left;}
+.label-icon{grid-row:1 / 3; font-size:26px;}
+.label-name{font-weight:700; font-size:16px;}
+.label-hint{font-size:13px; color:var(--ink-soft);}
+.label-btn.positive:hover:not(:disabled){border-color:var(--pos);}
+.label-btn.negative:hover:not(:disabled){border-color:var(--neg);}
+.label-btn.selected{border-color:var(--gold); background:#fffaef; box-shadow:0 0 0 3px rgba(242,184,75,0.3);}
+.label-btn:disabled{cursor:default;}
+.task-footer{display:flex; justify-content:flex-end; margin-top:20px;}
+.feedback-panel{border-radius:12px; padding:14px 18px; margin-top:18px; font-size:14.5px; line-height:1.55;}
+.feedback-panel.correct{background:#e9f9f1; color:#1c6b46; border:1px solid #b7e5cc;}
+.feedback-panel.incorrect{background:#fdeeee; color:#8a2f2f; border:1px solid #f3c3c3;}
+@media(max-width:640px){
+  .review-card{padding:22px 20px;} .review-text{font-size:16.5px;}
+  .choice-panel{padding:20px 18px;} .label-row{grid-template-columns:1fr;}
+}
+#task-topbar{display:flex; justify-content:space-between; align-items:center; margin-bottom:16px; gap:10px;}
+.progress-label{color:#c7cde2; font-size:13.5px; font-weight:600;}
+.progress-track{background:rgba(255,255,255,0.12); border-radius:999px; height:6px; width:180px; overflow:hidden; margin-top:6px;}
+.progress-fill{background:var(--gold); height:100%; border-radius:999px; transition:width .3s ease;}
+
+/* ---------- AI CARD ---------- */
+.ai-card{display:flex; align-items:center; gap:12px; flex-wrap:wrap; background:#eef1ff; border:1.5px solid #c9d0f5;
+  border-radius:16px; padding:14px 20px; margin-bottom:16px; color:var(--ink); font-size:15px;}
+.ai-card .ai-label{font-weight:700;}
+.ai-pill{display:inline-block; padding:5px 14px; border-radius:999px; background:#fff; border:1.5px solid #c9d0f5; font-weight:700; font-size:14px;}
+.tut-body .ai-card{margin:14px 0;}
+
+/* ---------- DONE / SYNC ---------- */
+.done-sub{text-align:left; margin:26px 0 0;}
+#done-table{text-align:left;}
+#done-table td.wrap{white-space:normal; min-width:220px; color:var(--ink-soft);}
+.sync{border-radius:12px; padding:14px 18px; font-size:14.5px; line-height:1.55; margin:18px auto 0; max-width:520px; text-align:left;}
+.sync.ok{background:#e9f9f1; color:#1c6b46;}
+.sync.wait{background:#fff7e6; color:#7a5b12;}
+.sync.err{background:#fdeeee; color:#8a2f2f;}
+
+/* ---------- ABOUT / DATA ---------- */
+.cite-box{background:var(--panel-soft); border-left:3px solid var(--cta); padding:14px 18px; border-radius:8px; font-size:13.5px; color:var(--ink-soft); margin-top:20px;}
+.data-actions{display:flex; gap:10px; flex-wrap:wrap; margin-top:18px;}
+.data-actions.center{justify-content:center;}
+.stat-row{display:flex; gap:16px; margin:18px 0; flex-wrap:wrap;}
+.stat{background:var(--panel-soft); border-radius:12px; padding:14px 18px; min-width:120px;}
+.stat b{display:block; font-size:22px; font-family:'Fraunces',serif;}
+.stat span{font-size:12px; color:var(--ink-soft);}
+.table-scroll{overflow-x:auto;}
+table{width:100%; border-collapse:collapse; font-size:13.5px; margin-top:16px;}
+th,td{text-align:left; padding:10px 12px; border-bottom:1px solid var(--line); white-space:nowrap;}
+th{color:var(--ink-soft); font-size:12.5px; font-weight:600;}
+.small-note{color:var(--ink-soft); font-size:13px; margin-top:14px;}
+
+@media (prefers-reduced-motion: reduce){ *{transition:none !important; animation:none !important;} }
+
+/* ---------- LANDING POPCORN ---------- */
+.popcorn-scatter{position:absolute; inset:0; z-index:1; pointer-events:none;}
+.kernel{position:absolute; left:var(--x); top:var(--y); width:var(--s); height:auto; aspect-ratio:1;
+  transform:rotate(var(--r)); filter:drop-shadow(0 4px 6px rgba(0,0,0,0.35));}
+.kernel.far{filter:none; opacity:.9;}  /* farther away: smaller, no shadow */
+</style>
+</head>
+<body>
+
+<!-- ============ LANDING ============ -->
+<section id="screen-landing" class="screen active">
+  <svg width="0" height="0" style="position:absolute;" aria-hidden="true" focusable="false">
+    <defs><radialGradient id="pc-lobe" cx=".4" cy=".35" r=".75"><stop offset="0" stop-color="#ffffff"/><stop offset=".6" stop-color="#fdf4dc"/><stop offset="1" stop-color="#efd79c"/></radialGradient><radialGradient id="pc-butter" cx=".4" cy=".35" r=".75"><stop offset="0" stop-color="#fffbea"/><stop offset=".55" stop-color="#fbe8ae"/><stop offset="1" stop-color="#e9c46c"/></radialGradient><linearGradient id="pc-hull" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#d4843a"/><stop offset="1" stop-color="#7f3c0f"/></linearGradient><g id="pc-a"><g transform="translate(30 45) rotate(8)"><path d="M-9 -5 q1 11 10 12 q9 -2 9 -13 q-9 4 -19 1z" fill="url(#pc-hull)" stroke="#6e330c" stroke-width=".7"/><path d="M-5 0 q4 4 9 1" fill="none" stroke="#f0b866" stroke-width="1.1" stroke-linecap="round"/></g><path d="M34.2 32.1 A5.4 5.4 0 0 1 40.4 27.5 A5.2 5.2 0 0 1 48.8 26.2 A5.4 5.4 0 0 1 51.7 33.3 A5.3 5.3 0 0 1 48.5 40.1 A5.6 5.6 0 0 1 39.1 41.6 A3.3 3.3 0 0 1 33.9 38.7 A3.8 3.8 0 0 1 34.2 32.1Z" fill="url(#pc-butter)" stroke="#cfae6d" stroke-width=".9" stroke-linejoin="round"/><path d="M28.3 36.6 A5.9 5.9 0 0 1 22.3 44.6 A9.0 9.0 0 0 1 9.8 39.3 A5.1 5.1 0 0 1 13.4 31.1 A4.9 4.9 0 0 1 20.2 28.3 A7.5 7.5 0 0 1 28.3 36.6Z" fill="url(#pc-lobe)" stroke="#cfae6d" stroke-width=".9" stroke-linejoin="round"/><path d="M48.5 23.8 A8.2 8.2 0 0 1 34.4 27.2 A6.7 6.7 0 0 1 27.1 19.3 A10.4 10.4 0 0 1 39.8 10.6 A7.5 7.5 0 0 1 50.8 15.4 A6.1 6.1 0 0 1 48.5 23.8Z" fill="url(#pc-lobe)" stroke="#cfae6d" stroke-width=".9" stroke-linejoin="round"/><path d="M12.5 16.0 A5.5 5.5 0 0 1 17.9 9.6 A5.5 5.5 0 0 1 26.2 11.6 A6.9 6.9 0 0 1 34.5 18.9 A7.3 7.3 0 0 1 32.9 29.2 A8.4 8.4 0 0 1 20.3 33.7 A6.3 6.3 0 0 1 14.5 25.2 A6.5 6.5 0 0 1 12.5 16.0Z" fill="url(#pc-lobe)" stroke="#cfae6d" stroke-width=".9" stroke-linejoin="round"/><path d="M18.8 30.8 A7.1 7.1 0 0 1 25.0 20.7 A5.7 5.7 0 0 1 34.9 19.5 A7.3 7.3 0 0 1 43.7 27.2 A5.4 5.4 0 0 1 41.8 36.4 A7.1 7.1 0 0 1 35.4 46.6 A10.2 10.2 0 0 1 21.3 39.3 A5.9 5.9 0 0 1 18.8 30.8Z" fill="url(#pc-lobe)" stroke="#cfae6d" stroke-width=".9" stroke-linejoin="round"/><path d="M24.6 9.8 A4.6 4.6 0 0 1 29.6 5.1 A4.4 4.4 0 0 1 36.0 5.4 A3.8 3.8 0 0 1 38.3 11.4 A3.6 3.6 0 0 1 38.2 17.3 A5.0 5.0 0 0 1 30.6 18.6 A4.1 4.1 0 0 1 25.1 15.3 A3.6 3.6 0 0 1 24.6 9.8Z" fill="url(#pc-lobe)" stroke="#cfae6d" stroke-width=".9" stroke-linejoin="round"/></g><g id="pc-b"><g transform="translate(40 44) rotate(-20)"><path d="M-9 -5 q1 11 10 12 q9 -2 9 -13 q-9 4 -19 1z" fill="url(#pc-hull)" stroke="#6e330c" stroke-width=".7"/><path d="M-5 0 q4 4 9 1" fill="none" stroke="#f0b866" stroke-width="1.1" stroke-linecap="round"/></g><path d="M28.4 20.9 A7.1 7.1 0 0 1 28.9 31.8 A7.8 7.8 0 0 1 17.0 34.3 A7.7 7.7 0 0 1 6.9 28.6 A10.4 10.4 0 0 1 19.5 17.1 A5.9 5.9 0 0 1 28.4 20.9Z" fill="url(#pc-lobe)" stroke="#cfae6d" stroke-width=".9" stroke-linejoin="round"/><path d="M39.8 35.3 A4.5 4.5 0 0 1 36.9 28.1 A5.5 5.5 0 0 1 40.6 19.0 A5.5 5.5 0 0 1 49.9 20.7 A4.5 4.5 0 0 1 54.9 27.1 A6.9 6.9 0 0 1 47.3 34.3 A4.6 4.6 0 0 1 39.8 35.3Z" fill="url(#pc-butter)" stroke="#cfae6d" stroke-width=".9" stroke-linejoin="round"/><path d="M44.3 42.6 A10.3 10.3 0 0 1 30.4 49.5 A9.0 9.0 0 0 1 23.8 37.5 A5.8 5.8 0 0 1 28.1 29.5 A9.2 9.2 0 0 1 41.2 31.3 A7.7 7.7 0 0 1 44.3 42.6Z" fill="url(#pc-lobe)" stroke="#cfae6d" stroke-width=".9" stroke-linejoin="round"/><path d="M30.8 27.9 A6.3 6.3 0 0 1 21.8 21.8 A7.2 7.2 0 0 1 24.5 9.4 A6.7 6.7 0 0 1 35.4 5.7 A8.0 8.0 0 0 1 44.4 13.7 A5.4 5.4 0 0 1 42.9 23.4 A7.8 7.8 0 0 1 30.8 27.9Z" fill="url(#pc-lobe)" stroke="#cfae6d" stroke-width=".9" stroke-linejoin="round"/><path d="M27.1 34.3 A3.8 3.8 0 0 1 28.6 40.3 A2.6 2.6 0 0 1 26.9 44.2 A3.3 3.3 0 0 1 22.8 46.7 A4.2 4.2 0 0 1 15.9 46.5 A5.6 5.6 0 0 1 12.8 37.7 A5.8 5.8 0 0 1 20.9 33.2 A3.5 3.5 0 0 1 27.1 34.3Z" fill="url(#pc-butter)" stroke="#cfae6d" stroke-width=".9" stroke-linejoin="round"/><path d="M19.7 31.6 A5.0 5.0 0 0 1 22.4 24.5 A5.5 5.5 0 0 1 28.4 19.1 A6.6 6.6 0 0 1 36.7 24.8 A5.3 5.3 0 0 1 36.5 33.6 A6.9 6.9 0 0 1 27.4 37.7 A5.9 5.9 0 0 1 19.7 31.6Z" fill="url(#pc-lobe)" stroke="#cfae6d" stroke-width=".9" stroke-linejoin="round"/></g></defs>
+  </svg>
+  <div class="popcorn-scatter" aria-hidden="true">
+    <svg class="kernel" viewBox="4 0 56 56" style="--x:6%; --y:12%; --s:46px; --r:-18deg;"><use href="#pc-a"/></svg>
+    <svg class="kernel far" viewBox="4 0 56 56" style="--x:16%; --y:30%; --s:28px; --r:40deg;"><use href="#pc-b"/></svg>
+    <svg class="kernel" viewBox="4 0 56 56" style="--x:9%; --y:58%; --s:38px; --r:12deg;"><use href="#pc-b"/></svg>
+    <svg class="kernel" viewBox="4 0 56 56" style="--x:4%; --y:82%; --s:52px; --r:-30deg;"><use href="#pc-a"/></svg>
+    <svg class="kernel far" viewBox="4 0 56 56" style="--x:20%; --y:76%; --s:30px; --r:65deg;"><use href="#pc-a"/></svg>
+    <svg class="kernel far" viewBox="4 0 56 56" style="--x:30%; --y:8%; --s:26px; --r:20deg;"><use href="#pc-b"/></svg>
+    <svg class="kernel" viewBox="4 0 56 56" style="--x:63%; --y:6%; --s:36px; --r:-45deg;"><use href="#pc-a"/></svg>
+    <svg class="kernel" viewBox="4 0 56 56" style="--x:83%; --y:15%; --s:50px; --r:25deg;"><use href="#pc-b"/></svg>
+    <svg class="kernel far" viewBox="4 0 56 56" style="--x:92%; --y:40%; --s:28px; --r:-10deg;"><use href="#pc-a"/></svg>
+    <svg class="kernel" viewBox="4 0 56 56" style="--x:87%; --y:64%; --s:42px; --r:50deg;"><use href="#pc-a"/></svg>
+    <svg class="kernel" viewBox="4 0 56 56" style="--x:75%; --y:85%; --s:36px; --r:-22deg;"><use href="#pc-b"/></svg>
+    <svg class="kernel far" viewBox="4 0 56 56" style="--x:93%; --y:88%; --s:26px; --r:15deg;"><use href="#pc-b"/></svg>
+    <svg class="kernel" viewBox="4 0 56 56" style="--x:43%; --y:88%; --s:40px; --r:-60deg;"><use href="#pc-b"/></svg>
+    <svg class="kernel far" viewBox="4 0 56 56" style="--x:56%; --y:77%; --s:24px; --r:30deg;"><use href="#pc-a"/></svg>
+  </div>
+  <div class="landing-inner">
+    <div id="ticket-scene">
+      <div class="ticket-wrap">
+        <button id="ticket" class="ticket" type="button">
+          <span class="ticket-main"><span class="ticket-admit" id="ticket-admit"></span><span class="ticket-title" id="ticket-title"></span></span>
+          <span class="ticket-stub"><span id="ticket-stub"></span></span>
+        </button>
+      </div>
+      <div class="ticket-hint" id="ticket-hint"></div>
+    </div>
+    <div id="letter" class="letter">
+      <div class="letter-title" id="letter-title"></div>
+      <div id="letter-body"></div>
+      <button class="btn btn-primary" id="continue-btn"></button>
+    </div>
+  </div>
+</section>
+
+<!-- ============ NAV ============ -->
+<nav id="navbar">
+  <div class="brand"><span class="brand-dot"></span> <span id="nav-brand"></span></div>
+  <div class="nav-links" id="nav-links">
+    <button class="nav-btn" data-nav="home"></button>
+    <button class="nav-btn" data-nav="instructions"></button>
+    <button class="nav-btn" data-nav="start"></button>
+    <button class="nav-btn" data-nav="about"></button>
+    <button class="nav-btn" data-nav="data" id="nav-data" hidden></button>
+  </div>
+</nav>
+
+<!-- ============ HOME ============ -->
+<section id="screen-home" class="screen">
+  <div class="center-wrap">
+    <div id="home-banners"></div>
+    <span class="tag" id="home-tag"></span>
+    <h1 class="hero-title" id="home-title"></h1>
+    <p class="hero-sub" id="home-subtitle"></p>
+    <figure class="sample-review">
+      <blockquote id="home-sample-text"></blockquote>
+      <figcaption id="home-sample-caption"></figcaption>
+    </figure>
+    <button class="btn btn-primary" id="home-start-btn"></button>
+  </div>
+</section>
+
+<!-- ============ PARTICIPANT INFO ============ -->
+<section id="screen-id" class="screen">
+  <div class="center-wrap">
+    <div class="card id-card">
+      <h2 id="id-heading"></h2>
+      <div class="field">
+        <label for="participant-input" id="id-name-label"></label>
+        <input id="participant-input" type="text" maxlength="60" autocomplete="username" autocapitalize="none" spellcheck="false">
+        <div class="hint" id="id-name-hint"></div>
+      </div>
+      <p class="consent" id="id-consent"></p>
+      <div class="form-error" id="id-error" role="alert"></div>
+      <button class="btn btn-primary btn-block" id="id-continue-btn"></button>
+    </div>
+  </div>
+</section>
+
+<!-- ============ TUTORIAL ============ -->
+<section id="screen-tutorial" class="screen">
+  <div class="page-wrap">
+    <div class="tut-progress" id="tut-progress"></div>
+    <div class="card tut-body" id="tut-body"></div>
+    <div class="tut-nav">
+      <button class="btn btn-dark" id="tut-back-btn"></button>
+      <button class="btn btn-primary" id="tut-next-btn"></button>
+    </div>
+  </div>
+</section>
+
+<!-- ============ PRACTICE ============ -->
+<section id="screen-practice" class="screen">
+  <div class="page-wrap">
+    <h2 class="on-dark" id="practice-heading"></h2>
+    <p class="on-dark-soft" id="practice-instructions"></p>
+    <article class="review-card"><div class="review-text" id="practice-text"></div></article>
+    <div class="ai-card" id="practice-ai"></div>
+    <div class="choice-panel">
+      <p class="choice-q" id="practice-q"></p>
+      <div class="label-row" id="practice-labels" role="group" aria-labelledby="practice-q"></div>
+      <p class="choice-q" id="practice-conf-q"></p>
+      <div id="practice-confidence" role="group" aria-labelledby="practice-conf-q"></div>
+      <div id="practice-feedback" role="status"></div>
+      <div class="task-footer"><button class="btn btn-primary" id="practice-btn" disabled></button></div>
+    </div>
+  </div>
+</section>
+
+<!-- ============ TASK ============ -->
+<section id="screen-task" class="screen">
+  <div class="page-wrap">
+    <div id="task-topbar">
+      <div>
+        <div class="progress-label" id="task-progress-label"></div>
+        <div class="progress-track"><div class="progress-fill" id="task-progress-fill" style="width:0%;"></div></div>
+      </div>
+      <button class="btn btn-dark btn-small" id="exit-btn"></button>
+    </div>
+    <article class="review-card"><div class="review-text" id="task-text"></div></article>
+    <div class="ai-card" id="task-ai"></div>
+    <div class="choice-panel">
+      <p class="choice-q" id="task-q"></p>
+      <div class="label-row" id="task-labels" role="group" aria-labelledby="task-q"></div>
+      <p class="choice-q" id="task-conf-q"></p>
+      <div id="task-confidence" role="group" aria-labelledby="task-conf-q"></div>
+      <div class="task-footer"><button class="btn btn-primary" id="task-next-btn" disabled></button></div>
+    </div>
+  </div>
+</section>
+
+<!-- ============ DONE ============ -->
+<section id="screen-done" class="screen">
+  <div class="page-wrap">
+    <div class="content-card center">
+      <h2 id="done-heading"></h2>
+      <p id="done-body"></p>
+      <div class="data-actions center"><button class="btn btn-primary" id="done-more-btn"></button></div>
+      <div id="done-sync" class="sync" role="status"></div>
+      <h3 class="done-sub" id="done-answers-heading"></h3>
+      <div class="table-scroll">
+        <table id="done-table"><thead><tr id="done-head"></tr></thead><tbody></tbody></table>
+      </div>
+      <div class="data-actions center">
+        <button class="btn btn-outline btn-small" id="done-download-btn"></button>
+        <button class="btn btn-outline btn-small" id="done-retry-btn" hidden></button>
+      </div>
+      <p class="small-note" id="done-email-note"></p>
+    </div>
+  </div>
+</section>
+
+<!-- ============ ABOUT ============ -->
+<section id="screen-about" class="screen">
+  <div class="page-wrap">
+    <div class="content-card">
+      <h2 id="about-heading"></h2>
+      <p id="about-intro"></p>
+      <h3 id="about-record-heading"></h3>
+      <p id="about-record-body"></p>
+      <h3 id="about-source-heading"></h3>
+      <p id="about-source-body"></p>
+      <div class="cite-box" id="about-citation"></div>
+    </div>
+  </div>
+</section>
+
+<!-- ============ DATA (researcher view: add ?researcher to the URL) ============ -->
+<section id="screen-data" class="screen">
+  <div class="page-wrap">
+    <div class="content-card">
+      <h2 id="data-heading"></h2>
+      <p style="margin-bottom:0;" id="data-intro"></p>
+      <div class="stat-row" id="data-stats"></div>
+      <p class="small-note" id="data-backend"></p>
+      <div class="data-actions">
+        <button class="btn btn-outline btn-small" id="export-csv-btn"></button>
+        <button class="btn btn-outline btn-small" id="export-json-btn"></button>
+        <button class="btn btn-outline btn-small" id="data-retry-btn"></button>
+        <button class="btn btn-danger btn-small" id="clear-data-btn"></button>
+      </div>
+      <div class="table-scroll">
+        <table id="data-table"><thead><tr id="data-head"></tr></thead><tbody></tbody></table>
+      </div>
+    </div>
+  </div>
+</section>
+
+<script>
+// Add ?researcher to the URL to see the Data tab.
+const IS_RESEARCHER = new URLSearchParams(location.search).has("researcher");
+
+const AC_BY_ID = Object.fromEntries(ATTENTION_CHECKS.map(a => [a.id, a]));
+const LABEL_META = { 1: { key: "positive" }, 0: { key: "negative" } };   // CSS class per label; text lives in COPY.labels
+const LABEL_ORDER = [1, 0];
+
+function fmt(template, vars){
+  return template.replace(/\{(\w+)\}/g, (m, key) => (key in vars ? vars[key] : m));
+}
+function labelName(v){ return COPY.labels[v].name; }
+// The AI's answer card shown under a review. Hidden when there's no AI answer
+// (attention checks, or a review with no AI label).
+function aiCardHTML(aiLabel){
+  return `<span aria-hidden="true">${COPY.ai.emoji}</span><span class="ai-label">${COPY.ai.label}:</span>` +
+         `<span class="ai-pill">${COPY.labels[aiLabel].emoji} ${labelName(aiLabel)}</span>`;
+}
+function showAiCard(id, aiLabel){
+  const el = document.getElementById(id);
+  const has = aiLabel === 0 || aiLabel === 1;
+  el.hidden = !has;
+  el.innerHTML = has ? aiCardHTML(aiLabel) : "";
+}
+
+/* ======================= DATA LOADING ======================= */
+var REVIEWS = [];
+var REVIEW_BY_ID = new Map();
+function cleanText(t){
+  return String(t).replace(/<br\s*\/?>/gi, "\n").replace(/\n{3,}/g, "\n\n").trim();
+}
+async function loadReviews(){
+  const res = await fetch(CONFIG.DATA_URL, { cache: "no-store" });
+  if(!res.ok) throw new Error("HTTP " + res.status + " loading " + CONFIG.DATA_URL);
+  const data = await res.json();
+  if(!Array.isArray(data) || data.length < CONFIG.N_TRIALS){
+    throw new Error(CONFIG.DATA_URL + " must be an array with at least " + CONFIG.N_TRIALS + " reviews");
+  }
+  data.forEach((r, i) => {
+    const okId = r && (typeof r.id === "number" || typeof r.id === "string");
+    if(!okId || typeof r.text !== "string" || (r.label !== 0 && r.label !== 1)){
+      throw new Error("Entry " + i + " needs an id, text, and label (0 or 1)");
+    }
+  });
+  REVIEWS = data.map(r => Object.assign({}, r, { id: String(r.id), text: cleanText(r.text) }));
+  REVIEW_BY_ID = new Map(REVIEWS.map(r => [r.id, r]));
+}
+
+/* ======================= STORAGE ======================= */
+// localStorage is a local mirror + upload queue; the Google Sheet is the
+// real record. Keys are namespaced by condition, except the list of reviews
+// this browser has already been shown, which both study versions share
+// (when hosted on the same github.io domain): anyone who happens to do both
+// versions in the same browser won't get the same review twice.
+const NS = "reviewStudy_" + CONFIG.CONDITION + "_";
+const SHARED_NS = "reviewStudy_shared_";
+const memoryFallback = {};
+function lsGet(key, fallback, shared){
+  const k = (shared ? SHARED_NS : NS) + key;
+  if(Object.prototype.hasOwnProperty.call(memoryFallback, k)) return memoryFallback[k];
+  try{ const v = localStorage.getItem(k); return v !== null ? JSON.parse(v) : fallback; }
+  catch(e){ return fallback; }
+}
+function lsSet(key, val, shared){
+  const k = (shared ? SHARED_NS : NS) + key;
+  memoryFallback[k] = val;
+  try{ localStorage.setItem(k, JSON.stringify(val)); }catch(e){}
+}
+function getDB(){ return lsGet("db", []); }
+function saveDB(db){ lsSet("db", db); }
+function getPending(){ return lsGet("pending", []); }
+function setPending(q){ lsSet("pending", q); }
+
+/* ======================= UPLOAD QUEUE ======================= */
+let flushing = false;
+let lastSyncFailed = false;
+function queueRecord(rec){
+  const db = getDB(); db.push(rec); saveDB(db);
+  const q = getPending(); q.push(rec); setPending(q);
+  flushQueue();
+}
+async function flushQueue(){
+  if(!CONFIG.ENDPOINT || flushing){ updateSyncStatus(); return; }
+  const batch = getPending().slice();
+  if(batch.length === 0){ lastSyncFailed = false; updateSyncStatus(); return; }
+  flushing = true; updateSyncStatus();
+  let ok = false;
+  try{
+    // text/plain keeps this a "simple" request, so Apps Script needs no CORS preflight.
+    const res = await fetch(CONFIG.ENDPOINT, {
+      method: "POST",
+      headers: { "Content-Type": "text/plain;charset=utf-8" },
+      body: JSON.stringify({ records: batch.map(({ record_id, ...row }) => row) }),
+    });
+    const out = await res.json();
+    if(!out.ok) throw new Error(out.error || "backend rejected the records");
+    if(typeof out.saved === "number" && out.saved !== batch.length) throw new Error("backend saved " + out.saved + " of " + batch.length + " rows");
+    const sent = new Set(batch.map(r => r.record_id));
+    setPending(getPending().filter(r => !sent.has(r.record_id)));
+    ok = true;
+  }catch(e){
+    console.warn("Upload failed, will retry:", e);
+  }finally{
+    flushing = false;
+    lastSyncFailed = !ok;
+    updateSyncStatus();
+  }
+  if(ok && getPending().length) flushQueue();
+}
+function syncState(){
+  if(!CONFIG.ENDPOINT) return "local";
+  if(getPending().length === 0) return "ok";
+  return lastSyncFailed ? "err" : "wait";
+}
+function updateSyncStatus(){
+  const st = syncState();
+  const el = document.getElementById("done-sync");
+  el.className = "sync " + ({ ok: "ok", wait: "wait", err: "err", local: "wait" }[st]);
+  el.innerHTML = fmt(COPY.done.sync[st], { email: CONFIG.CONTACT_EMAIL });
+  document.getElementById("done-retry-btn").hidden = st !== "err";
+  if(document.getElementById("screen-data").classList.contains("active")) renderDataStats();
+}
+window.addEventListener("online", flushQueue);
+window.addEventListener("beforeunload", (e) => {
+  if(CONFIG.ENDPOINT && getPending().length){ e.preventDefault(); e.returnValue = ""; }
+});
+
+/* ======================= APP STATE ======================= */
+let state = {
+  session: lsGet("session", null),
+  tutStep: 0,
+  practiceIdx: 0,
+  practiceChecked: false,
+  practiceSel: null,
+  taskSel: null,
+  reviewMode: false,   // true while someone is re-reading the Instructions tab
+  trial: null,         // the item on screen
+};
+function saveSession(){ lsSet("session", state.session); }
+
+/* ======================= NAV / SCREENS ======================= */
+// Screens where the nav links are hidden (none: Instructions stays reachable mid-review).
+const LOCKED_SCREENS = new Set([]);
+function show(id){
+  document.querySelectorAll(".screen").forEach(s => s.classList.remove("active"));
+  document.getElementById(id).classList.add("active");
+  document.getElementById("navbar").classList.toggle("show", id !== "screen-landing");
+  document.getElementById("nav-links").hidden = LOCKED_SCREENS.has(id);
+  const map = { "screen-home": "home", "screen-id": "start", "screen-tutorial": "start", "screen-practice": "start",
+                "screen-about": "about", "screen-data": "data" };
+  const inReview = state.reviewMode && (id === "screen-tutorial" || id === "screen-practice");
+  document.querySelectorAll(".nav-btn").forEach(b => b.classList.toggle("active", b.dataset.nav === (inReview ? "instructions" : map[id])));
+  window.scrollTo(0, 0);
+}
+document.querySelectorAll(".nav-btn").forEach(btn => {
+  btn.addEventListener("click", () => {
+    const t = btn.dataset.nav;
+    state.reviewMode = false;
+    if(t === "instructions") openInstructions();
+    else if(t === "home") renderHome();
+    else if(t === "start") startOrResume();
+    else if(t === "about") show("screen-about");
+    else if(t === "data") renderDataView();
+  });
+});
+
+/* ======================= LANDING ======================= */
+document.getElementById("ticket").addEventListener("click", () => {
+  document.getElementById("ticket").classList.add("torn");
+  document.getElementById("ticket-hint").style.visibility = "hidden";
+  setTimeout(() => {
+    const scene = document.getElementById("ticket-scene");
+    scene.classList.add("fading");
+    setTimeout(() => {
+      scene.classList.add("gone");
+      document.getElementById("letter").classList.add("show");
+      document.getElementById("continue-btn").focus();
+    }, 400);
+  }, 550);
+});
+// Same logic as "Label data": resume, keep going, or ask only for what's missing.
+document.getElementById("continue-btn").addEventListener("click", () => startOrResume());
+
+/* ======================= HOME ======================= */
+function renderHome(){
+  const slot = document.getElementById("home-banners");
+  slot.innerHTML = "";
+  if(!CONFIG.ENDPOINT){
+    const warn = document.createElement("div");
+    warn.className = "banner warn";
+    warn.innerHTML = COPY.home.noBackendWarning;
+    slot.appendChild(warn);
+  }
+  const s = state.session, profile = getProfile();
+  const addBanner = (html, btnText, onClick) => {
+    const banner = document.createElement("div");
+    banner.className = "banner resume";
+    banner.innerHTML = `<span>${html}</span>`;
+    const actions = document.createElement("span");
+    actions.className = "banner-actions";
+    const notYou = document.createElement("button");
+    notYou.className = "btn btn-outline btn-small";
+    notYou.textContent = COPY.home.notYouBtn;
+    notYou.addEventListener("click", switchPerson);
+    actions.appendChild(notYou);
+    if(btnText){
+      const btn = document.createElement("button");
+      btn.className = "btn btn-primary btn-small";
+      btn.textContent = btnText;
+      btn.addEventListener("click", onClick);
+      actions.appendChild(btn);
+    }
+    banner.appendChild(actions);
+    slot.appendChild(banner);
+  };
+  if(s && s.status === "in_progress"){
+    addBanner(fmt(COPY.home.resumeTemplate, { name: escapeHtml(s.participant) }), COPY.home.resumeBtn, resumeSession);
+  } else if(s && s.status === "complete"){
+    const count = getDB().filter(r => r.record_type === "trial" && r.session_id === s.sessionId && r.item_type === "review").length;
+    addBanner(fmt(COPY.home.moreTemplate, { count, name: escapeHtml(s.participant) }), fmt(COPY.home.moreBtn, { n: CONFIG.N_TRIALS }), startNextBatch);
+  } else if(profile){
+    addBanner(fmt(COPY.home.labelingAsTemplate, { name: escapeHtml(profile.uniqname) }), null, null);
+  }
+  show("screen-home");
+}
+document.getElementById("home-start-btn").addEventListener("click", () => startOrResume());
+
+// This browser remembers the participant's uniqname and whether they've done the
+// tutorial, so returning to "Label data" never asks for either again.
+function getProfile(){ return lsGet("profile", null); }
+function setProfile(p){ lsSet("profile", p); }
+// Instructions tab: replays the tutorial and both practice reviews, exactly as
+// written in COPY.tutorial / PRACTICE. Nothing is recorded and progress is untouched.
+function openInstructions(){
+  state.reviewMode = true;
+  state.tutStep = 0;
+  renderTutorialStep();
+  show("screen-tutorial");
+}
+function closeInstructions(){
+  state.reviewMode = false;
+  const s = state.session;
+  if(s && s.status === "in_progress" && s.stage === "task") renderTask();  // back to the review they were on
+  else renderHome();
+}
+function startOrResume(){
+  state.reviewMode = false;
+  const s = state.session, profile = getProfile();
+  if(s && s.status === "in_progress"){ resumeSession(); return; }
+  if(s && s.status === "complete"){ startNextBatch(); return; }           // keep going in the same session
+  if(profile){                                                           // known person, no session saved here
+    state.session = newSession(profile.uniqname);
+    if(profile.tutorialDone){ startTask(); return; }
+    saveSession(); state.tutStep = 0; renderTutorialStep(); show("screen-tutorial"); return;
+  }
+  renderIdScreen();
+}
+// "Not you?": forget this browser's participant so someone else can start fresh.
+function switchPerson(){
+  setProfile(null);
+  state.session = null;
+  saveSession();
+  renderIdScreen();
+}
+function newSession(name){
+  return {
+    sessionId: uid(),
+    participant: name,
+    status: "in_progress",
+    stage: "tutorial",
+    items: buildAssignment(),
+    progress: 0,
+    batchNumber: 1,        // a batch = N_TRIALS reviews + the attention checks
+    batchStart: 0,         // index in items where the current batch begins
+    batchesCompleted: 0,
+    practiceFirstTryCorrect: 0,
+    startedAt: Date.now(),
+    taskStartedAt: null,
+    taskEndedAt: null,
+  };
+}
+function resumeSession(){
+  const stage = state.session.stage;
+  if(stage === "practice") startPractice();
+  else if(stage === "task") renderTask();
+  else if(stage === "survey") finishSession(); // sessions saved by the earlier version that had a survey
+  else { state.tutStep = 0; renderTutorialStep(); show("screen-tutorial"); }
+}
+
+/* ======================= PARTICIPANT INFO ======================= */
+function renderIdScreen(){
+  const input = document.getElementById("participant-input");
+  input.value = "";   // never carry over a previous participant's uniqname
+  document.getElementById("id-error").textContent = "";
+  show("screen-id");
+  input.focus();
+}
+document.getElementById("id-continue-btn").addEventListener("click", () => {
+  // Normalize so "JaneDoe" and "janedoe@umich.edu" both become "janedoe".
+  const name = document.getElementById("participant-input").value.trim().toLowerCase().replace(/@umich\.edu$/, "").slice(0, 60);
+  const err = document.getElementById("id-error");
+  if(!name){ err.textContent = COPY.idScreen.nameRequired; return; }
+  setProfile({ uniqname: name, tutorialDone: false });
+  state.session = newSession(name);
+  saveSession();
+  state.tutStep = 0;
+  renderTutorialStep();
+  show("screen-tutorial");
+});
+
+// Random N reviews (preferring ones this browser hasn't been shown), plus the
+// two attention checks: one in each half, never as the very first item.
+function buildAssignment(){
+  const N = CONFIG.N_TRIALS;
+  const seen = new Set(lsGet("seenReviewIds", [], true));
+  let pool = REVIEWS.filter(r => !seen.has(r.id));
+  if(pool.length < N) pool = REVIEWS.slice();
+  const picks = shuffle(pool).slice(0, N);
+  lsSet("seenReviewIds", Array.from(new Set([...seen, ...picks.map(r => r.id)])), true);
+
+  const half = Math.ceil(N / 2);
+  const checks = shuffle(ATTENTION_CHECKS);
+  const p1 = 1 + Math.floor(Math.random() * half);              // before review p1 (1..half)
+  const p2 = half + 1 + Math.floor(Math.random() * (N - half)); // before review p2 (half+1..N)
+  const items = [];
+  picks.forEach((r, i) => {
+    if(i === p1) items.push({ type: "check", id: checks[0].id });
+    if(i === p2) items.push({ type: "check", id: checks[1].id });
+    items.push({ type: "review", id: r.id });
+  });
+  if(p2 === N) items.push({ type: "check", id: checks[1].id });
+  if(p1 === N) items.push({ type: "check", id: checks[0].id }); // only possible when N = 1
+  return items;
+}
+
+/* ======================= TUTORIAL ======================= */
+// Each step in COPY.tutorial.steps can use any of: heading, intro, paragraphs,
+// cards, exampleText (+ exampleLabel), outro, bullets. {n} = reviews per batch.
+function renderStepHTML(s){
+  const t = (x) => fmt(x, { n: CONFIG.N_TRIALS });
+  let html = `<h2>${t(s.heading || "")}</h2>`;
+  if(s.intro) html += `<p>${t(s.intro)}</p>`;
+  if(s.paragraphs) html += s.paragraphs.map(p => `<p>${t(p)}</p>`).join("");
+  if(s.cards) html += `<div class="def-grid">${s.cards.map(c => `<div class="def-card"><div class="def-emoji" aria-hidden="true">${c.emoji || ""}</div><div class="def-name">${c.title || ""}</div><div class="def-text">${c.text || ""}</div></div>`).join("")}</div>`;
+  if(s.exampleText){
+    const m = LABEL_META[s.exampleLabel];
+    const pill = m ? `<span class="pill ${m.key}">${COPY.labels[s.exampleLabel].emoji} ${labelName(s.exampleLabel)}</span>` : "";
+    html += `<div class="example-box"><div class="review-text">${s.exampleText}</div>${pill}</div>`;
+  }
+  if(s.aiExample === 0 || s.aiExample === 1) html += `<div class="ai-card">${aiCardHTML(s.aiExample)}</div>`;
+  if(s.outro) html += `<p>${t(s.outro)}</p>`;
+  if(s.bullets) html += `<ul>${s.bullets.map(b => `<li>${t(b)}</li>`).join("")}</ul>`;
+  return html;
+}
+const TUT_STEPS = COPY.tutorial.steps.map(step => () => renderStepHTML(step));
+function renderTutorialStep(){
+  document.getElementById("tut-body").innerHTML = TUT_STEPS[state.tutStep]();
+  document.getElementById("tut-progress").innerHTML = TUT_STEPS.map((_, i) =>
+    `<div class="tut-dot ${i < state.tutStep ? "done" : (i === state.tutStep ? "now" : "")}"></div>`).join("");
+  document.getElementById("tut-back-btn").disabled = state.tutStep === 0;
+  document.getElementById("tut-next-btn").textContent =
+    state.tutStep === TUT_STEPS.length - 1 ? COPY.tutorial.lastStepBtn : COPY.tutorial.nextBtn;
+}
+document.getElementById("tut-back-btn").addEventListener("click", () => {
+  if(state.tutStep > 0){ state.tutStep--; renderTutorialStep(); }
+});
+document.getElementById("tut-next-btn").addEventListener("click", () => {
+  if(state.tutStep < TUT_STEPS.length - 1){ state.tutStep++; renderTutorialStep(); window.scrollTo(0, 0); }
+  else if(state.reviewMode){ state.practiceIdx = 0; renderPractice(); }
+  else startPractice();
+});
+
+/* ======================= SHARED CHOICE CONTROLS ======================= */
+// Builds the Positive/Negative buttons and the 1–5 confidence scale into
+// #<prefix>-labels and #<prefix>-confidence. onChange(field, value, previous).
+function buildChoice(prefix, onChange){
+  const sel = { label: null, confidence: null };
+  const labelsWrap = document.getElementById(prefix + "-labels");
+  labelsWrap.innerHTML = "";
+  LABEL_ORDER.forEach(v => {
+    const m = LABEL_META[v], c = COPY.labels[v];
+    const b = document.createElement("button");
+    b.type = "button"; b.className = "label-btn " + m.key; b.setAttribute("aria-pressed", "false");
+    b.innerHTML = `<span class="label-icon" aria-hidden="true">${c.emoji}</span><span class="label-name">${c.name}</span><span class="label-hint">${c.hint}</span>`;
+    b.addEventListener("click", () => {
+      const prev = sel.label; sel.label = v;
+      markSelected(labelsWrap, b);
+      onChange("label", v, prev, sel);
+    });
+    labelsWrap.appendChild(b);
+  });
+  const confWrap = document.getElementById(prefix + "-confidence");
+  confWrap.innerHTML = "";
+  const scale = buildScale(5, (v) => { const prev = sel.confidence; sel.confidence = v; onChange("confidence", v, prev, sel); });
+  confWrap.appendChild(scale);
+  confWrap.insertAdjacentHTML("beforeend", `<div class="seg-ends" aria-hidden="true"><span>${COPY.task.confLow}</span><span>${COPY.task.confHigh}</span></div>`);
+  return sel;
+}
+function buildScale(n, onPick){
+  const wrap = document.createElement("div");
+  wrap.className = "seg"; wrap.style.setProperty("--n", n);
+  for(let v = 1; v <= n; v++){
+    const b = document.createElement("button");
+    b.type = "button"; b.className = "seg-btn"; b.textContent = v; b.setAttribute("aria-pressed", "false");
+    b.addEventListener("click", () => { markSelected(wrap, b); onPick(v); });
+    wrap.appendChild(b);
+  }
+  return wrap;
+}
+function markSelected(container, btn){
+  container.querySelectorAll("button").forEach(x => { const on = x === btn; x.classList.toggle("selected", on); x.setAttribute("aria-pressed", on); });
+}
+function lockChoice(prefix){
+  ["-labels", "-confidence"].forEach(s => document.querySelectorAll("#" + prefix + s + " button").forEach(b => b.disabled = true));
+}
+
+/* ======================= PRACTICE ======================= */
+function startPractice(){
+  state.session.stage = "practice";
+  state.session.practiceFirstTryCorrect = 0;
+  saveSession();
+  state.practiceIdx = 0;
+  renderPractice();
+}
+function renderPractice(){
+  const p = PRACTICE[state.practiceIdx];
+  document.getElementById("practice-heading").textContent = fmt(COPY.practice.heading, { n: state.practiceIdx + 1, total: PRACTICE.length });
+  document.getElementById("practice-text").textContent = p.text;
+  showAiCard("practice-ai", p.aiLabel);
+  document.getElementById("practice-feedback").innerHTML = "";
+  const btn = document.getElementById("practice-btn");
+  btn.textContent = COPY.practice.checkBtn;
+  btn.disabled = true;
+  state.practiceChecked = false;
+  state.practiceSel = buildChoice("practice", (f, v, prev, sel) => { btn.disabled = sel.label === null || sel.confidence === null; });
+  show("screen-practice");
+}
+document.getElementById("practice-btn").addEventListener("click", () => {
+  const btn = document.getElementById("practice-btn");
+  if(!state.practiceChecked){
+    const sel = state.practiceSel;
+    if(sel.label === null || sel.confidence === null) return;
+    const p = PRACTICE[state.practiceIdx];
+    const ok = sel.label === p.label;
+    if(ok && !state.reviewMode && state.session){ state.session.practiceFirstTryCorrect++; saveSession(); }
+    const fb = document.getElementById("practice-feedback");
+    fb.innerHTML = `<div class="feedback-panel ${ok ? "correct" : "incorrect"}">${ok ? COPY.practice.correctPrefix : COPY.practice.incorrectPrefix}${fmt(COPY.practice.answerTemplate, { label: labelName(p.label) })} ${p.explain}</div>`;
+    lockChoice("practice");
+    state.practiceChecked = true;
+    btn.textContent = state.practiceIdx < PRACTICE.length - 1 ? COPY.practice.nextBtn
+                    : (state.reviewMode ? COPY.practice.reviewDoneBtn : COPY.practice.startBtn);
+    fb.scrollIntoView({ block: "nearest" });
+  } else if(state.practiceIdx < PRACTICE.length - 1){
+    state.practiceIdx++;
+    renderPractice();
+  } else if(state.reviewMode){
+    closeInstructions();
+  } else {
+    startTask();
+  }
+});
+
+/* ======================= TASK ======================= */
+function startTask(){
+  const s = state.session;
+  s.stage = "task";
+  s.taskStartedAt = Date.now();
+  saveSession();
+  const profile = getProfile() || { uniqname: s.participant };
+  setProfile(Object.assign(profile, { tutorialDone: true }));
+  renderTask();
+}
+function itemContent(item){
+  if(item.type === "check"){ const a = AC_BY_ID[item.id]; return a ? { text: a.text, gold: a.label, review: null } : null; }
+  const r = REVIEW_BY_ID.get(item.id);
+  return r ? { text: r.text, gold: r.label, review: r } : null;
+}
+function renderTask(){
+  const s = state.session;
+  if(!s || s.status !== "in_progress"){ renderHome(); return; }
+  if(s.progress >= s.items.length){ finishSession(); return; }
+  const item = s.items[s.progress];
+  const content = itemContent(item);
+  if(!content){
+    // The dataset changed under a saved session; skip the missing item.
+    console.warn("Skipping item not found in dataset:", item);
+    s.progress++; saveSession(); renderTask(); return;
+  }
+  const start = s.batchStart || 0;
+  const total = s.items.length - start;
+  const pos = s.progress - start;
+  document.getElementById("task-text").textContent = content.text;
+  showAiCard("task-ai", content.review ? content.review.ai_label : null);   // no AI card on attention checks
+  document.getElementById("task-progress-label").textContent = fmt(COPY.task.progressTemplate, { n: pos + 1, total });
+  document.getElementById("task-progress-fill").style.width = (pos / total * 100) + "%";
+  const next = document.getElementById("task-next-btn");
+  next.textContent = pos === total - 1 ? COPY.task.lastBtn : COPY.task.nextBtn;
+  next.disabled = true;
+
+  state.trial = { item, content };
+  state.taskSel = buildChoice("task", (field, v, prev, sel) => {
+    next.disabled = sel.label === null || sel.confidence === null;
+  });
+  show("screen-task");
+}
+
+document.getElementById("task-next-btn").addEventListener("click", () => {
+  const s = state.session, t = state.trial, sel = state.taskSel;
+  if(!s || !t || sel.label === null || sel.confidence === null) return;
+  const isCheck = t.item.type === "check";
+  // Apart from record_type (which tab it goes to) and record_id (used for retries),
+  // these keys are the columns of the Google Sheet's "trials" tab.
+  const rec = {
+    record_type: "trial",
+    record_id: uid(),
+    uniqname: s.participant,
+    session_id: s.sessionId,
+    condition: CONFIG.CONDITION,
+    batch_number: s.batchNumber || 1,
+    item_type: isCheck ? "attention_check" : "review",
+    review_id: t.item.id,                      // row number in the study CSV
+    true_label: t.content.gold,                // 1 = positive, 0 = negative
+    participant_label: sel.label,
+    confidence: sel.confidence,                // 1-5
+  };
+  queueRecord(rec);
+  state.trial = null;
+  s.progress++;
+  saveSession();
+  if(s.progress >= s.items.length){ s.taskEndedAt = Date.now(); finishSession(); }
+  else renderTask();
+});
+
+document.getElementById("exit-btn").addEventListener("click", () => {
+  if(!confirm(COPY.task.exitConfirm)) return;
+  // The session stays "in_progress" in this browser, so Home offers Resume.
+  state.trial = null;
+  renderHome();
+});
+
+
+/* ======================= FINISH ======================= */
+function finishSession(){
+  const s = state.session;
+  s.status = "complete";
+  if(!s.taskEndedAt) s.taskEndedAt = Date.now();
+  s.batchesCompleted = (s.batchesCompleted || 0) + 1;
+  saveSession();
+  renderDone();
+}
+// "Label 5 more": same session and uniqname, a fresh random batch (no tutorial or practice).
+function startNextBatch(){
+  const s = state.session;
+  if(!s || s.status !== "complete") return;
+  s.batchNumber = (s.batchNumber || 1) + 1;
+  s.batchStart = s.items.length;
+  s.items = s.items.concat(buildAssignment());
+  s.status = "in_progress";
+  s.stage = "task";
+  s.taskEndedAt = null;
+  saveSession();
+  renderTask();
+}
+document.getElementById("done-more-btn").addEventListener("click", startNextBatch);
+
+/* ======================= DONE ======================= */
+function renderDone(){
+  const sid = state.session ? state.session.sessionId : null;
+  const answers = getDB().filter(r => r.record_type === "trial" && r.session_id === sid && r.item_type === "review");
+  document.getElementById("done-head").innerHTML = COPY.done.tableHeaders.map(h => `<th>${h}</th>`).join("");
+  document.querySelector("#done-table tbody").innerHTML = answers.map((r, i) => {
+    const rev = REVIEW_BY_ID.get(r.review_id);
+    const snippet = rev ? (rev.text.length > 90 ? rev.text.slice(0, 90).trim() + "..." : rev.text) : "";
+    return `<tr><td>${i + 1}</td><td class="wrap">${escapeHtml(snippet)}</td><td>${labelName(r.participant_label)}</td><td>${fmt(COPY.done.confidenceTemplate, { n: r.confidence })}</td></tr>`;
+  }).join("");
+  updateSyncStatus();
+  show("screen-done");
+  flushQueue();
+}
+document.getElementById("done-retry-btn").addEventListener("click", () => { lastSyncFailed = false; flushQueue(); });
+// Participants' copy leaves out the correct labels (they may still do the other
+// version of the study) and internal fields. review_id lets you re-score it.
+const HIDDEN_FROM_PARTICIPANTS = ["true_label", "record_type", "record_id"];
+document.getElementById("done-download-btn").addEventListener("click", () => {
+  const s = state.session;
+  if(!s) return;
+  const rows = getDB().filter(r => r.session_id === s.sessionId).map(r => {
+    const copy = Object.assign({}, r);
+    HIDDEN_FROM_PARTICIPANTS.forEach(k => delete copy[k]);
+    return copy;
+  });
+  downloadCSV(rows, "review-study-" + s.participant.replace(/[^a-z0-9_-]/gi, "") + "-" + CONFIG.CONDITION + ".csv");
+});
+
+/* ======================= DATA VIEW (researcher) ======================= */
+function renderDataStats(){
+  const db = getDB();
+  const [l1, l2, l3] = COPY.data.statLabels;
+  const nTrials = db.filter(r => r.record_type === "trial" && r.item_type === "review").length;
+  const nDone = new Set(db.filter(r => r.record_type === "trial").map(r => r.uniqname)).size;
+  document.getElementById("data-stats").innerHTML = `
+    <div class="stat"><b>${nTrials}</b><span>${l1}</span></div>
+    <div class="stat"><b>${nDone}</b><span>${l2}</span></div>
+    <div class="stat"><b>${getPending().length}</b><span>${l3}</span></div>`;
+  document.getElementById("data-backend").textContent = CONFIG.ENDPOINT ? COPY.data.backendOn : COPY.data.backendOff;
+}
+function renderDataView(){
+  renderDataStats();
+  document.getElementById("data-head").innerHTML = COPY.data.tableHeaders.map(h => `<th>${h}</th>`).join("");
+  const rows = getDB().filter(r => r.record_type === "trial").slice().reverse();
+  document.querySelector("#data-table tbody").innerHTML = rows.map(r => {
+    const item = r.item_type === "review" ? fmt(COPY.data.reviewItem, { id: escapeHtml(r.review_id) }) : fmt(COPY.data.checkItem, { id: escapeHtml(r.review_id) });
+    return `<tr><td>${escapeHtml(r.uniqname)}</td><td>${item}</td><td>${labelName(r.true_label)}</td><td>${labelName(r.participant_label)}${r.participant_label === r.true_label ? "" : COPY.data.wrongMark}</td><td>${r.confidence}</td></tr>`;
+  }).join("");
+  show("screen-data");
+}
+document.getElementById("export-csv-btn").addEventListener("click", () => downloadCSV(getDB(), "review-study-" + CONFIG.CONDITION + ".csv"));
+document.getElementById("export-json-btn").addEventListener("click", () =>
+  downloadBlob(JSON.stringify(getDB(), null, 2), "review-study-" + CONFIG.CONDITION + ".json", "application/json"));
+document.getElementById("data-retry-btn").addEventListener("click", () => { lastSyncFailed = false; flushQueue(); });
+document.getElementById("clear-data-btn").addEventListener("click", () => {
+  if(confirm(COPY.data.clearConfirm)){ saveDB([]); renderDataView(); }
+});
+
+/* ======================= UTIL ======================= */
+function uid(){
+  if(window.crypto && crypto.randomUUID) return crypto.randomUUID();
+  return Date.now().toString(36) + "-" + Math.random().toString(36).slice(2, 10);
+}
+function shuffle(arr){
+  const a = arr.slice();
+  for(let i = a.length - 1; i > 0; i--){ const j = Math.floor(Math.random() * (i + 1)); [a[i], a[j]] = [a[j], a[i]]; }
+  return a;
+}
+function escapeHtml(str){
+  return String(str).replace(/[&<>"']/g, s => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[s]));
+}
+function downloadCSV(records, filename){
+  if(records.length === 0){ downloadBlob("no data yet", filename, "text/csv"); return; }
+  const cols = [];
+  records.forEach(r => Object.keys(r).forEach(k => { if(!cols.includes(k)) cols.push(k); }));
+  const cell = (v) => {
+    let s = v === null || v === undefined ? "" : String(v);
+    if(/[",\n]/.test(s)) s = '"' + s.replace(/"/g, '""') + '"';
+    return s;
+  };
+  downloadBlob([cols.join(",")].concat(records.map(r => cols.map(c => cell(r[c])).join(","))).join("\n"), filename, "text/csv");
+}
+function downloadBlob(content, filename, mime){
+  const url = URL.createObjectURL(new Blob([content], { type: mime }));
+  const a = document.createElement("a");
+  a.href = url; a.download = filename;
+  document.body.appendChild(a); a.click(); document.body.removeChild(a);
+  URL.revokeObjectURL(url);
+}
+
+/* ======================= STATIC COPY ======================= */
+function setHTML(id, html){ document.getElementById(id).innerHTML = html; }
+function applyStaticCopy(){
+  document.title = COPY.pageTitle;
+  const L = COPY.landing;
+  setHTML("ticket-admit", L.ticketAdmit);
+  setHTML("ticket-title", L.ticketTitle);
+  setHTML("ticket-stub", L.ticketStub);
+  setHTML("ticket-hint", L.ticketHint);
+  document.getElementById("ticket").setAttribute("aria-label", L.ticketHint);
+  setHTML("letter-title", L.letterTitle);
+  setHTML("letter-body", L.letterParagraphs.map(p => `<p>${p}</p>`).join(""));
+  setHTML("continue-btn", L.continueBtn);
+
+  setHTML("nav-brand", COPY.nav.brand);
+  document.querySelectorAll(".nav-btn").forEach(b => { if(COPY.nav[b.dataset.nav] !== undefined) b.innerHTML = COPY.nav[b.dataset.nav]; });
+
+  const H = COPY.home;
+  setHTML("home-tag", H.tag);
+  setHTML("home-title", H.title);
+  setHTML("home-subtitle", fmt(H.subtitle, { n: CONFIG.N_TRIALS }));
+  setHTML("home-sample-text", H.sampleText);
+  setHTML("home-sample-caption", H.sampleCaption);
+  setHTML("home-start-btn", H.startBtn);
+
+  const I = COPY.idScreen;
+  setHTML("id-heading", I.heading);
+  setHTML("id-name-label", I.nameLabel);
+  document.getElementById("participant-input").placeholder = I.namePlaceholder;
+  setHTML("id-name-hint", I.nameHint);
+  setHTML("id-consent", I.consent);
+  setHTML("id-continue-btn", I.continueBtn);
+
+  setHTML("tut-back-btn", COPY.tutorial.backBtn);
+  setHTML("tut-next-btn", COPY.tutorial.nextBtn);
+
+  setHTML("practice-instructions", COPY.practice.instructions);
+  setHTML("practice-q", COPY.task.question);
+  setHTML("practice-conf-q", COPY.task.confidenceQuestion);
+
+  setHTML("task-q", COPY.task.question);
+  setHTML("task-conf-q", COPY.task.confidenceQuestion);
+  setHTML("exit-btn", COPY.task.exitBtn);
+
+  setHTML("done-heading", COPY.done.heading);
+  setHTML("done-body", fmt(COPY.done.body, { n: CONFIG.N_TRIALS }));
+  setHTML("done-more-btn", fmt(COPY.done.moreBtn, { n: CONFIG.N_TRIALS }));
+  setHTML("done-retry-btn", COPY.done.retryBtn);
+  setHTML("done-download-btn", COPY.done.downloadBtn);
+  setHTML("done-answers-heading", COPY.done.answersHeading);
+  setHTML("done-email-note", fmt(COPY.done.emailNote, { email: CONFIG.CONTACT_EMAIL }));
+
+  const A = COPY.about;
+  setHTML("about-heading", A.heading);
+  setHTML("about-intro", A.intro);
+  setHTML("about-record-heading", A.recordHeading);
+  setHTML("about-record-body", A.recordBody);
+  setHTML("about-source-heading", A.sourceHeading);
+  setHTML("about-source-body", A.sourceBody);
+  setHTML("about-citation", A.citation);
+
+  const D = COPY.data;
+  setHTML("data-heading", D.heading);
+  setHTML("data-intro", D.intro);
+  setHTML("export-csv-btn", D.csvBtn);
+  setHTML("export-json-btn", D.jsonBtn);
+  setHTML("data-retry-btn", D.retryBtn);
+  setHTML("clear-data-btn", D.clearBtn);
+}
+
+/* ======================= INIT ======================= */
+(async function init(){
+  try{
+    await loadReviews();
+  }catch(e){
+    console.error("Failed to load reviews:", e);
+    document.body.innerHTML = `<div style="min-height:100vh; display:flex; align-items:center; justify-content:center; background:#0b1330; color:#fff; font-family:'Inter',sans-serif; text-align:center; padding:40px;">
+      <div><h1 style="font-family:'Fraunces',serif; color:#fff; font-size:26px; margin-bottom:12px;">${COPY.loadError.heading}</h1>
+      <p style="color:#c7cde2; max-width:460px; margin:0 auto; line-height:1.6;">${fmt(COPY.loadError.body, { file: escapeHtml(CONFIG.DATA_URL), error: escapeHtml(e.message) })}</p></div></div>`;
+    return;
+  }
+  applyStaticCopy();
+  if(IS_RESEARCHER) document.getElementById("nav-data").hidden = false;
+  updateSyncStatus();
+  flushQueue();
+  setInterval(flushQueue, 15000);
+  // A reload in the middle of a session drops the participant back where they were.
+  if(state.session && state.session.status === "in_progress") resumeSession();
+  else show("screen-landing");
+})();
+</script>
+</body>
+</html>
