@@ -706,6 +706,12 @@ var REVIEW_BY_ID = new Map();
 function cleanText(t){
   return String(t).replace(/<br\s*\/?>/gi, "\n").replace(/\n{3,}/g, "\n\n").trim();
 }
+// A missing explanation (absent, blank, or written out as "nan"/"none"/"null") shows nothing.
+function cleanExplanation(x){
+  if(typeof x !== "string") return "";
+  const t = cleanText(x);
+  return /^(nan|none|null)$/i.test(t) ? "" : t;
+}
 async function loadReviews(){
   const res = await fetch(CONFIG.DATA_URL, { cache: "no-store" });
   if(!res.ok) throw new Error("HTTP " + res.status + " loading " + CONFIG.DATA_URL);
@@ -722,7 +728,7 @@ async function loadReviews(){
   REVIEWS = data.map(r => Object.assign({}, r, {
     id: String(r.id),
     text: cleanText(r.text),
-    ai_explanation: typeof r.ai_explanation === "string" ? cleanText(r.ai_explanation) : "",
+    ai_explanation: cleanExplanation(r.ai_explanation),
   }));
   REVIEW_BY_ID = new Map(REVIEWS.map(r => [r.id, r]));
 }

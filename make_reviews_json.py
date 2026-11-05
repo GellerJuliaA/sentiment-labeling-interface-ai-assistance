@@ -22,8 +22,8 @@ for i, row in df.iterrows():
         "id": int(i),
         "text": clean(row["text"]),
         "label": int(row["label"]),
-        "ai_label": int(row["ai_classification"]),
-        "ai_explanation": clean(row["ai_explanation"])
+        "ai_label": int(row["classification"]),
+        "ai_explanation": "" if pd.isna(row["explanation"]) else clean(row["explanation"])
     })
 
 with open("reviews.json", "w", encoding="utf-8") as f:
