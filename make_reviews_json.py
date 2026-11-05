@@ -23,6 +23,7 @@ for i, row in df.iterrows():
         "text": clean(row["text"]),
         "label": int(row["label"]),
         "ai_label": int(row["ai_classification"]),
+        "ai_explanation": clean(row["ai_explanation"])
     })
 
 with open("reviews.json", "w", encoding="utf-8") as f:

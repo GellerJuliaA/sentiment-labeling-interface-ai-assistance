@@ -82,7 +82,8 @@ var COPY = {
     nextBtn: "Next",
     lastStepBtn: "Start practice",
     // Each step can use any of: heading, intro, paragraphs, cards, exampleText
-    // (+ exampleLabel), aiExample (1 or 0), outro, bullets. Add, remove, or reorder steps freely.
+    // (+ exampleLabel), aiExample (1 or 0, + aiExampleExplanation), outro, bullets.
+    // Add, remove, or reorder steps freely.
     steps: [
       { heading: "Task", paragraphs: [
         "You'll read <b>movie reviews</b> written by IMDb users.",
@@ -111,9 +112,10 @@ var COPY = {
         outro: "The negative words describe a character and a sad ending, not the movie. 'Wow, what a movie' and 'I haven't stopped thinking about it' show the reviewer likely enjoyed it.",
       },
       { heading: "AI Assistance",
-        intro: "For each review, you will also see the AI's answer, like this:",
+        intro: "For each review, you will also see the AI's answer and its explanation, like this:",
         aiExample: 1,
-        outro: "You can use the AI's answer to help decide what you think the answer is.",
+        aiExampleExplanation: "The reviewer calls the movie amazing and says they would watch it again.",
+        outro: "You can use the AI's answer and explanation to help decide what you think the answer is.",
       },
       { heading: "Attention Checks", paragraphs: [
         "During each round of annotation, you will get two attention checks to make sure you're focused on the task.",
@@ -151,8 +153,9 @@ var COPY = {
   },
 
   ai: {
-    label: "AI's answer",   // shown on the card under each review
+    label: "AI's answer",            // shown on the card under each review
     emoji: "🤖",
+    explanationLabel: "Explanation:", // shown before the AI's explanation, under its answer
   },
 
   labels: {
@@ -214,13 +217,15 @@ var COPY = {
 /* =====================================================================
    STUDY CONTENT — practice items, tutorial example, attention checks.
    Labels: 1 = positive, 0 = negative (same as the IMDB dataset).
-   aiLabel is the AI's answer shown on each practice review.
+   aiLabel and aiExplanation are the AI's answer and explanation shown on each practice review.
 ===================================================================== */
 const PRACTICE = [
   { id: "P1", label: 1, aiLabel: 1,
+    aiExplanation: "The reviewer has two complaints but liked the ending and is recommending it to friends.",
     text: "middle part dragged and the villain was kinda boring but the last 30 min were great. already told my friends to go see it",
     explain: "They list two complaints, but they liked the ending and are recommending it." },
   { id: "P2", label: 0, aiLabel: 0,
+    aiExplanation: "The reviewer likes the visuals and music but says they were bored and wasted their evening.",
     text: "looks amazing and the music is good but honestly i was bored the whole time. kept checking my phone. waste of an evening",
     explain: "They say nice things about the visuals and music, but they were bored and felt it was a waste of time." },
 ];
@@ -438,6 +443,8 @@ textarea{width:100%; min-height:110px; border-radius:12px; border:1.5px solid va
   border-radius:16px; padding:14px 20px; margin-bottom:16px; color:var(--ink); font-size:15px;}
 .ai-card .ai-label{font-weight:700;}
 .ai-pill{display:inline-block; padding:5px 14px; border-radius:999px; background:#fff; border:1.5px solid #c9d0f5; font-weight:700; font-size:14px;}
+.ai-expl{flex-basis:100%; margin:0; color:var(--ink-soft); font-size:14.5px; line-height:1.6;}
+.ai-expl b{color:var(--ink);}
 .tut-body .ai-card{margin:14px 0;}
 
 /* ---------- DONE / SYNC ---------- */
@@ -678,17 +685,19 @@ function fmt(template, vars){
   return template.replace(/\{(\w+)\}/g, (m, key) => (key in vars ? vars[key] : m));
 }
 function labelName(v){ return COPY.labels[v].name; }
-// The AI's answer card shown under a review. Hidden when there's no AI answer
-// (attention checks, or a review with no AI label).
-function aiCardHTML(aiLabel){
-  return `<span aria-hidden="true">${COPY.ai.emoji}</span><span class="ai-label">${COPY.ai.label}:</span>` +
-         `<span class="ai-pill">${COPY.labels[aiLabel].emoji} ${labelName(aiLabel)}</span>`;
+// The AI's card under a review: its answer first, then its explanation (if there is one).
+// Hidden when there's no AI answer (attention checks, or a review with no AI label).
+function aiCardHTML(aiLabel, explanation){
+  let html = `<span aria-hidden="true">${COPY.ai.emoji}</span><span class="ai-label">${COPY.ai.label}:</span>` +
+             `<span class="ai-pill">${COPY.labels[aiLabel].emoji} ${labelName(aiLabel)}</span>`;
+  if(explanation) html += `<p class="ai-expl"><b>${COPY.ai.explanationLabel}</b> ${escapeHtml(explanation)}</p>`;
+  return html;
 }
-function showAiCard(id, aiLabel){
+function showAiCard(id, aiLabel, explanation){
   const el = document.getElementById(id);
   const has = aiLabel === 0 || aiLabel === 1;
   el.hidden = !has;
-  el.innerHTML = has ? aiCardHTML(aiLabel) : "";
+  el.innerHTML = has ? aiCardHTML(aiLabel, explanation) : "";
 }
 
 /* ======================= DATA LOADING ======================= */
@@ -710,7 +719,11 @@ async function loadReviews(){
       throw new Error("Entry " + i + " needs an id, text, and label (0 or 1)");
     }
   });
-  REVIEWS = data.map(r => Object.assign({}, r, { id: String(r.id), text: cleanText(r.text) }));
+  REVIEWS = data.map(r => Object.assign({}, r, {
+    id: String(r.id),
+    text: cleanText(r.text),
+    ai_explanation: typeof r.ai_explanation === "string" ? cleanText(r.ai_explanation) : "",
+  }));
   REVIEW_BY_ID = new Map(REVIEWS.map(r => [r.id, r]));
 }
 
@@ -1015,7 +1028,7 @@ function renderStepHTML(s){
     const pill = m ? `<span class="pill ${m.key}">${COPY.labels[s.exampleLabel].emoji} ${labelName(s.exampleLabel)}</span>` : "";
     html += `<div class="example-box"><div class="review-text">${s.exampleText}</div>${pill}</div>`;
   }
-  if(s.aiExample === 0 || s.aiExample === 1) html += `<div class="ai-card">${aiCardHTML(s.aiExample)}</div>`;
+  if(s.aiExample === 0 || s.aiExample === 1) html += `<div class="ai-card">${aiCardHTML(s.aiExample, s.aiExampleExplanation)}</div>`;
   if(s.outro) html += `<p>${t(s.outro)}</p>`;
   if(s.bullets) html += `<ul>${s.bullets.map(b => `<li>${t(b)}</li>`).join("")}</ul>`;
   return html;
@@ -1094,7 +1107,7 @@ function renderPractice(){
   const p = PRACTICE[state.practiceIdx];
   document.getElementById("practice-heading").textContent = fmt(COPY.practice.heading, { n: state.practiceIdx + 1, total: PRACTICE.length });
   document.getElementById("practice-text").textContent = p.text;
-  showAiCard("practice-ai", p.aiLabel);
+  showAiCard("practice-ai", p.aiLabel, p.aiExplanation);
   document.getElementById("practice-feedback").innerHTML = "";
   const btn = document.getElementById("practice-btn");
   btn.textContent = COPY.practice.checkBtn;
@@ -1158,7 +1171,8 @@ function renderTask(){
   const total = s.items.length - start;
   const pos = s.progress - start;
   document.getElementById("task-text").textContent = content.text;
-  showAiCard("task-ai", content.review ? content.review.ai_label : null);   // no AI card on attention checks
+  // no AI card on attention checks
+  showAiCard("task-ai", content.review ? content.review.ai_label : null, content.review ? content.review.ai_explanation : "");
   document.getElementById("task-progress-label").textContent = fmt(COPY.task.progressTemplate, { n: pos + 1, total });
   document.getElementById("task-progress-fill").style.width = (pos / total * 100) + "%";
   const next = document.getElementById("task-next-btn");
